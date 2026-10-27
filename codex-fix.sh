@@ -3,7 +3,11 @@
 set -euo pipefail
 
 if ! command -v python3 >/dev/null 2>&1; then
-    printf '%s\n' 'Ошибка: требуется Python 3.9+ (пакет python3).' >&2
+    if [[ -t 2 && ! -v NO_COLOR && ${TERM:-} != dumb ]]; then
+        printf '\033[31m  ❌ Требуется Python 3.9+. Установите пакет python3.\033[0m\n' >&2
+    else
+        printf '%s\n' '  [X] Требуется Python 3.9+. Установите пакет python3.' >&2
+    fi
     exit 1
 fi
 

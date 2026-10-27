@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
               "http_proxy", "https_proxy", "all_proxy", "no_proxy")
 LOCAL_BYPASS = "localhost,127.0.0.1,::1"
@@ -40,8 +40,92 @@ ENDPOINTS = (
 )
 
 
-def log(message):
-    print(message, flush=True)
+class Console:
+    """Small terminal UI; redirected output stays free of ANSI escapes."""
+
+    styles = {
+        "ok": ("✅", "OK", "32"),
+        "warn": ("⚠️", "!", "33"),
+        "error": ("❌", "X", "31"),
+        "info": ("ℹ️", "i", "36"),
+        "plan": ("🔧", ">", "36"),
+        "title": ("⚡", "*", "1;36"),
+        "detail": ("·", "-", "90"),
+    }
+
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+
+    def style(self, text, color, stream):
+        if stream.isatty() and "NO_COLOR" not in os.environ and os.environ.get("TERM") != "dumb":
+            return f"\033[{color}m{text}\033[0m"
+        return text
+
+    def render(self, message, kind, stream):
+        icon, plain, color = self.styles[kind]
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        try:
+            icon.encode(encoding)
+        except (UnicodeEncodeError, LookupError):
+            icon = f"[{plain}]"
+        if os.environ.get("TERM") == "dumb":
+            icon = f"[{plain}]"
+        text = f"  {icon} {message}"
+        text = self.style(text, color, stream)
+        return text.encode(encoding, errors="replace").decode(encoding)
+
+    def line(self, message="", kind="info", *, stream=None):
+        stream = sys.stdout if stream is None else stream
+        print(self.render(message, kind, stream) if message else "", file=stream, flush=True)
+
+    def detail(self, message):
+        if self.verbose:
+            self.line(message, "detail")
+
+    def heading(self, mode):
+        self.line()
+        self.line(f"Codex Fix {VERSION} · {mode}", "title")
+        self.line()
+
+
+console = Console()
+
+
+def log(message, kind="info"):
+    console.line(message, kind)
+
+
+def display_path(path, home):
+    try:
+        return "~/" + str(path.relative_to(home))
+    except ValueError:
+        return str(path)
+
+
+def target_label(key):
+    if key.startswith("desktop:"):
+        name = key.removeprefix("desktop:")
+        name = {"chatgpt.desktop": "ChatGPT",
+                "com.microsoft.VSCode.desktop": "VS Code",
+                "com.microsoft.VSCode.UrlHandler.desktop": "VS Code · ссылки"}.get(name, name)
+        return "Ярлык · " + name
+    return {"codex": "Codex CLI", "code": "VS Code", "code-insiders": "VS Code Insiders",
+            "chatgpt": "ChatGPT", "codex-desktop": "Codex Desktop"}.get(key, key)
+
+
+def network_note():
+    log("Проверена сеть. Вход, квота и ответы — в самом приложении.", "detail")
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        console.line(message, "error", stream=sys.stderr)
+        console.line("Справка: codex-fix --help", stream=sys.stderr)
+        self.exit(2)
+
+    def format_help(self):
+        help_text = super().format_help().replace("usage: ", "Запуск: ", 1)
+        return console.render(f"Codex Fix {VERSION}", "title", sys.stdout) + "\n\n" + help_text
 
 
 def run(argv, *, env=None, timeout=15):
@@ -129,7 +213,7 @@ class Probe:
 
 def discover_proxies():
     if not shutil.which("ss"):
-        log("[!] ss не найден: автопоиск портов недоступен; можно указать --proxy.")
+        log("Автопоиск портов недоступен: нет ss. Укажите --proxy URL.", "warn")
         return []
     try:
         result = run(["ss", "-H", "-ltnp"])
@@ -470,10 +554,22 @@ def gui_base(processes):
 def doctor(args, *, home=None, env=None):
     home = home or Path.home()
     env = dict(os.environ if env is None else env)
+    if args.restore:
+        mode = "предпросмотр отката" if args.check else "откат"
+    else:
+        mode = "проверка" if args.check else "проверка и исправление"
+    console.heading(mode)
     store = Store(home)
     if args.restore:
         count = store.restore(args.check)
-        log(f"{'Будет восстановлено' if args.check else 'Восстановлено'} файлов: {count}.")
+        if not count:
+            log("Откатывать нечего: сохранённых исправлений нет.", "ok")
+        elif args.check:
+            log(f"К откату · файлов: {count}. Ничего не изменено.", "plan")
+            log("Применить: codex-fix --restore")
+        else:
+            log(f"Откат завершён · файлов: {count}", "ok")
+            log("Откройте новый терминал. Открытые приложения полностью перезапустите.")
         return 3 if args.check and count else 0
     if not shutil.which("curl"):
         raise ValueError("Не найден curl. Установите пакет curl и повторите запуск.")
@@ -481,18 +577,18 @@ def doctor(args, *, home=None, env=None):
     processes = process_environments()
     desktop_env = gui_base(processes)
     targets = installed_targets()
-    log(f"Codex Fix {VERSION} — {'только проверка' if args.check else 'автоматическая проверка и исправление'}")
-    log("Обнаружены команды: " + (", ".join(t.name for t in targets) or "не найдены"))
+    console.detail("Команды: " + (", ".join(t.name for t in targets) or "не найдены"))
     extensions = list((home / ".vscode/extensions").glob("openai.chatgpt-*/package.json"))
     extensions += list((home / ".vscode-insiders/extensions").glob("openai.chatgpt-*/package.json"))
-    log(f"Расширение Codex для VS Code: {'найдено' if extensions else 'не найдено в стандартных каталогах'}.")
+    log(f"Расширение Codex · {'найдено' if extensions else 'не найдено в стандартных каталогах'}", "ok" if extensions else "info")
     if not any(t.name.startswith("code") and t.gui for t in targets):
-        log("[i] VS Code не найден в PATH; проверяю также desktop-ярлыки.")
+        console.detail("VS Code нет в PATH; проверяю ярлыки.")
     selected = None
     writes = {}
     routes = {}
     commands = {}
     failures = []
+    restart = []
 
     # Warn about explicit VS Code overrides without trying to rewrite arbitrary JSONC.
     # These settings can override process env and therefore prevent a complete repair.
@@ -503,13 +599,14 @@ def doctor(args, *, home=None, env=None):
             overrides = re.findall(r'"(http\.proxy|chatgpt\.cliExecutable)"\s*:\s*("(?:\\.|[^"\\])*"|null)', settings_text)
             for key, raw in overrides:
                 if json.loads(raw):
-                    log(f"[!] {folder}: задан {key}; он может перекрывать исправление. Проверьте настройку в редакторе.")
+                    log(f"{folder} · проверьте {key}: настройка может перекрыть исправление.", "warn")
                     failures.append(f"{folder}:{key}")
 
     def choose():
         nonlocal selected
         if selected is not None:
             return selected
+        log("Ищу рабочее подключение…")
         candidates = [route_for(args.proxy)] if args.proxy else []
         for existing in [proxy_env(env), *store.state["routes"].values()]:
             saved = persistent_route(existing)
@@ -533,9 +630,11 @@ def doctor(args, *, home=None, env=None):
         known = store.state["routes"].get(key, current)
         ok, detail = probe.check(known)
         if ok:
-            log(f"[OK] {key}: {detail}")
+            log(f"{target_label(key)} · сеть доступна", "ok")
+            console.detail(f"{key} · {detail}")
             return known, key in store.state["routes"]
-        log(f"[FIX] {key}: {detail}")
+        log(f"{target_label(key)} · нужно исправление", "plan")
+        console.detail(f"{key} · {detail}")
         fixed = choose()
         routes[key] = fixed
         return fixed, True
@@ -548,7 +647,7 @@ def doctor(args, *, home=None, env=None):
             commands[target.name] = path
         if target.gui and processes.get(target.name):
             if any(not probe.check(item)[0] for item in processes[target.name]):
-                log(f"[!] {target.name} уже запущен со старым окружением; потребуется полностью закрыть и открыть приложение.")
+                restart.append(target_label(target.name))
 
     desktop_count = 0
     for name, path in desktop_files(home).items():
@@ -559,7 +658,7 @@ def doctor(args, *, home=None, env=None):
             if not kind:
                 continue
             if kind == "unsupported":
-                log(f"[!] {name}: sandbox/нестандартный Exec; автоматическое изменение пропущено.")
+                log(f"{name} · пропущен: sandbox или нестандартный Exec.", "warn")
                 failures.append(name)
                 continue
             desktop_count += 1
@@ -570,11 +669,12 @@ def doctor(args, *, home=None, env=None):
                 writes[destination] = (patched.encode(), 0o600)
                 writes.update(launchers)
         except (ValueError, OSError) as error:
-            log(f"[!] {name}: {error}")
+            log(f"{name} · {error}", "warn")
             failures.append(name)
 
     if not targets and not desktop_count:
-        log("[!] Codex/VS Code/ChatGPT не обнаружены; установите нужное приложение. Изменений нет.")
+        log("Приложения не найдены. Установите Codex, VS Code или ChatGPT.", "warn")
+        log("Файлы не изменены.", "detail")
         return 1
 
     if commands:
@@ -587,38 +687,70 @@ def doctor(args, *, home=None, env=None):
                 mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o600
                 writes[path] = (updated.encode(), mode)
             except ValueError as error:
-                log(f"[!] {path.name}: {error} Обёртки доступны в {store.bin}.")
+                log(f"{path.name} · {error}", "warn")
+                log(f"Обёртки: {display_path(store.bin, home)}")
                 failures.append(path.name)
 
+    def next_steps(changed=False):
+        if restart:
+            log("Перезапустите · " + ", ".join(restart), "warn")
+            log("Сохраните работу, полностью закройте и снова откройте эти приложения.")
+        if changed:
+            log("Откройте новый терминал." if restart else
+                "Откройте новый терминал. Открытые приложения полностью перезапустите.")
+        network_note()
+
     pending = store.pending(writes)
+    console.line()
     if not pending:
-        log("Изменения не требуются: проверенные маршруты и управляемые файлы исправны.")
-        log("Это проверка сети; вход в аккаунт, квота и генерация ответа проверяются в самом Codex.")
+        if failures:
+            log(f"Проверка завершена с замечаниями: {len(failures)}. Файлы не изменены.", "warn")
+        else:
+            log("Всё в порядке · изменения не нужны", "ok")
+        next_steps()
         return 1 if failures else 0
     for path in pending:
-        log(f"  {'План' if args.check else 'Исправление'}: {path}")
+        console.detail(f"План · {display_path(path, home)}")
     if args.check:
+        log(f"К исправлению · файлов: {len(pending)}. Ничего не изменено.", "plan")
+        if failures:
+            log(f"Требуют внимания: {len(failures)}. Подробности выше.", "warn")
+        log("Применить: codex-fix --fix")
+        next_steps()
         return 3
     # Recheck before writes; a transient success must not cause persistent broken settings.
     for route in {json.dumps(r, sort_keys=True) for r in routes.values()}:
         if not probe.check(json.loads(route), fresh=True)[0]:
             raise ValueError("Повторная проверка маршрута не прошла. Файлы не изменены.")
     count = store.apply(writes, routes)
-    log(f"Готово: изменено файлов — {count}. Резервные копии: {store.manifest}")
-    log("Новый терминал подхватит обёртки; для открытых GUI сохраните работу и полностью перезапустите приложение.")
-    log("Проверена сетевая доступность, а не вход в аккаунт/квота/генерация ответа. Авторизация остаётся за приложением.")
+    if failures:
+        log(f"Исправлено частично · файлов: {count} · замечаний: {len(failures)}", "warn")
+    else:
+        log(f"Готово · обновлено файлов: {count}", "ok")
+    log(f"Резервная копия · {display_path(store.manifest, home)}", "detail")
+    next_steps(changed=True)
     return 1 if failures else 0
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Автоматический сетевой фикс Codex CLI, VS Code и ChatGPT/Codex Desktop для Linux.")
-    parser.add_argument("--fix", action="store_true", help="автоматически проверить и исправить все найденные компоненты (режим по умолчанию)")
+    global console
+    console = Console()
+    parser = ArgumentParser(prog="codex-fix", add_help=False,
+                            usage="%(prog)s [параметры]",
+                            description="Проверка и исправление сети для Codex, VS Code и ChatGPT на Linux.",
+                            epilog="Примеры: codex-fix --fix | codex-fix --check --verbose | codex-fix --restore",
+                            formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=28, width=88))
+    parser._optionals.title = "Параметры"
+    parser.add_argument("-h", "--help", action="help", help="показать справку")
+    parser.add_argument("--fix", action="store_true", help="проверить и исправить (по умолчанию)")
     parser.add_argument("--check", "--dry-run", action="store_true", help="только диагностика, без записи файлов")
     parser.add_argument("--proxy", help="предпочтительный локальный http(s):// или socks5(h):// прокси")
     parser.add_argument("--timeout", type=int, default=6, choices=range(1, 31), metavar="1..30", help="тайм-аут одной проверки, секунды")
     parser.add_argument("--restore", action="store_true", help="восстановить файлы до первого исправления")
-    parser.add_argument("--version", action="version", version=VERSION)
+    parser.add_argument("-v", "--verbose", action="store_true", help="показать HTTP-коды и пути изменяемых файлов")
+    parser.add_argument("--version", action="version", version=f"Codex Fix {VERSION}", help="показать версию")
     args = parser.parse_args(argv)
+    console.verbose = args.verbose
     if args.fix and (args.check or args.restore):
         parser.error("--fix нельзя сочетать с --check/--dry-run или --restore")
     if sys.version_info < (3, 9):
@@ -639,10 +771,11 @@ def main(argv=None):
                 raise ValueError("Другой экземпляр codex-fix уже выполняется.") from error
             return doctor(args)
     except KeyboardInterrupt:
-        log("Проверка прервана пользователем.")
+        console.line()
+        console.line("Операция прервана пользователем.", "warn", stream=sys.stderr)
         return 130
     except (ValueError, OSError, subprocess.SubprocessError) as error:
-        log(f"[Ошибка] {error}")
+        console.line(str(error), "error", stream=sys.stderr)
         return 2
 
 

@@ -223,6 +223,20 @@ class FilesTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_verbose_selects_detailed_output(self):
+        self.addCleanup(setattr, fix, "console", fix.Console())
+        with patch.object(fix.os, "geteuid", return_value=1000), patch.object(fix.socket, "socket"), patch.object(fix, "doctor", return_value=0):
+            self.assertEqual(fix.main(["--check", "--verbose"]), 0)
+            self.assertTrue(fix.console.verbose)
+
+    def test_runtime_error_goes_to_stderr(self):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), patch.object(fix.os, "geteuid", return_value=1000), patch.object(fix.socket, "socket"), patch.object(fix, "doctor", side_effect=ValueError("Нет рабочего маршрута")):
+            self.assertEqual(fix.main([]), 2)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("Нет рабочего маршрута", stderr.getvalue())
+        self.assertNotIn("\033[", stderr.getvalue())
+
     def test_fix_selects_automatic_repair(self):
         with patch.object(fix.os, "geteuid", return_value=1000), patch.object(fix.socket, "socket"), patch.object(fix, "doctor", return_value=0) as doctor:
             self.assertEqual(fix.main(["--fix"]), 0)
@@ -248,7 +262,8 @@ class DoctorTests(unittest.TestCase):
         self.args = argparse.Namespace(restore=False, check=False, proxy=None, timeout=1)
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
-        self.stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+        self.output = self.stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+        self.stack.enter_context(patch.object(fix, "console", fix.Console()))
         self.stack.enter_context(patch.object(fix, "process_environments", return_value={}))
         self.stack.enter_context(patch.object(fix, "desktop_files", return_value={}))
         self.stack.enter_context(patch.object(fix, "installed_targets", return_value=[fix.Target("codex", "/usr/bin/codex")]))
@@ -257,6 +272,21 @@ class DoctorTests(unittest.TestCase):
     def test_healthy_run_creates_no_files(self):
         with patch.object(fix.Probe, "check", return_value=(True, "healthy")):
             self.assertEqual(fix.doctor(self.args, home=self.home, env={}), 0)
+        self.assertEqual(list(self.home.iterdir()), [])
+
+    def test_compact_and_verbose_diagnostics(self):
+        self.args.check = True
+        for verbose in (False, True):
+            with self.subTest(verbose=verbose), patch.object(fix, "console", fix.Console(verbose)), patch.object(fix.Probe, "check", side_effect=lambda route, **kw: (bool(route), "auth: HTTP 403")):
+                self.output.seek(0)
+                self.output.truncate()
+                self.assertEqual(fix.doctor(self.args, home=self.home, env={}), 3)
+                output = self.output.getvalue()
+                self.assertIn("Ничего не изменено", output)
+                self.assertNotIn("Готово", output)
+                self.assertEqual("HTTP 403" in output, verbose)
+                self.assertEqual("~/.local/share/codex-fix/bin/codex" in output, verbose)
+                self.assertNotIn(str(self.home), output)
         self.assertEqual(list(self.home.iterdir()), [])
 
     def test_check_and_no_route_create_no_files(self):
@@ -303,6 +333,32 @@ class DoctorTests(unittest.TestCase):
         with patch.object(fix.Probe, "check", return_value=(True, "healthy")):
             self.assertEqual(fix.doctor(self.args, home=self.home, env={}), 1)
         self.assertEqual(settings.read_text(), text)
+        self.assertIn("с замечаниями", self.output.getvalue())
+        self.assertNotIn("Всё в порядке", self.output.getvalue())
+
+
+class ConsoleTests(unittest.TestCase):
+    def test_color_only_in_capable_terminal(self):
+        for tty, env, colored in (
+            (True, {"TERM": "xterm-256color"}, True),
+            (False, {"TERM": "xterm"}, False),
+            (True, {"TERM": "xterm", "NO_COLOR": ""}, False),
+            (True, {"TERM": "dumb"}, False),
+        ):
+            stream = io.StringIO()
+            with self.subTest(tty=tty, env=env), patch.dict(os.environ, env, clear=True), patch.object(stream, "isatty", return_value=tty):
+                fix.Console().line("Готово", "ok", stream=stream)
+                self.assertEqual("\033[" in stream.getvalue(), colored)
+                self.assertIn("Готово", stream.getvalue())
+                if env.get("TERM") == "dumb":
+                    self.assertIn("[OK]", stream.getvalue())
+                    self.assertNotIn("✅", stream.getvalue())
+
+    def test_unsupported_icon_encoding_uses_plain_marker(self):
+        buffer = io.BytesIO()
+        stream = io.TextIOWrapper(buffer, encoding="cp1251")
+        fix.Console().line("Готово", "ok", stream=stream)
+        self.assertIn("[OK] Готово", buffer.getvalue().decode("cp1251"))
 
 
 if __name__ == "__main__":
