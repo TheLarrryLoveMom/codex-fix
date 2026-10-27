@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.coverage
+htmlcov/
+.env
+.env.*
+!.env.example
+.agents/
+.codex/
+.aws/
+*.log
+*.bak
+*.pem
+*.key
+manifest.json
