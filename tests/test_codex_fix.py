@@ -254,6 +254,54 @@ class CliTests(unittest.TestCase):
                 doctor.assert_not_called()
 
 
+class InstallerTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="codex-fix-installer-")
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name) / "home"
+        self.fake_bin = Path(self.temp.name) / "bin"
+        self.fake_bin.mkdir()
+        fake_curl = self.fake_bin / "curl"
+        fake_curl.write_text("""#!/bin/sh
+output=''
+url=''
+while [ $# -gt 0 ]; do
+    case \"$1\" in
+        --output) output=$2; shift 2 ;;
+        --*) shift ;;
+        *) url=$1; shift ;;
+    esac
+done
+cp \"$FIXTURE_DIR/${url##*/}\" \"$output\"
+""")
+        fake_curl.chmod(0o700)
+
+    def installer_env(self):
+        return {**os.environ, "HOME": str(self.home), "FIXTURE_DIR": str(Path(__file__).parents[1]),
+                "PATH": str(self.fake_bin) + os.pathsep + os.environ["PATH"]}
+
+    def test_installer_downloads_and_runs_the_local_command(self):
+        installer = Path(__file__).parents[1] / "install.sh"
+        result = subprocess.run(["bash", str(installer), "--help"], env=self.installer_env(),
+                                capture_output=True, text=True, check=True)
+        launcher = self.home / ".local/bin/codex-fix"
+        app = self.home / ".local/share/codex-fix/app"
+        self.assertTrue(launcher.is_symlink())
+        self.assertEqual(launcher.resolve(), app / "codex-fix.sh")
+        self.assertTrue((app / "codex_fix.py").is_file())
+        self.assertIn("Codex Fix " + fix.VERSION, result.stdout)
+
+    def test_installer_never_replaces_an_unmanaged_launcher(self):
+        launcher = self.home / ".local/bin/codex-fix"
+        launcher.parent.mkdir(parents=True)
+        launcher.write_text("user command")
+        result = subprocess.run(["bash", str(Path(__file__).parents[1] / "install.sh")],
+                                env=self.installer_env(), capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(launcher.read_text(), "user command")
+        self.assertIn("not managed", result.stderr)
+
+
 class DoctorTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="codex-fix-doctor-")

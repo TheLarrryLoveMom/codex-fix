@@ -1,4 +1,24 @@
-# ⚡ Codex Fix
+<p align="center">
+  <img src="https://raw.githubusercontent.com/TheLarrryLoveMom/codex-fix/main/.github/assets/logo.svg" alt="Codex Fix" width="96" height="96">
+</p>
+
+<h1 align="center">⚡ Codex Fix</h1>
+
+<p align="center">
+  <strong>Верните Codex, VS Code и ChatGPT в сеть за один запуск.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/TheLarrryLoveMom/codex-fix/actions/workflows/check.yml"><img src="https://github.com/TheLarrryLoveMom/codex-fix/actions/workflows/check.yml/badge.svg" alt="Проверки"></a>
+  <a href="https://github.com/TheLarrryLoveMom/codex-fix/stargazers"><img src="https://img.shields.io/github/stars/TheLarrryLoveMom/codex-fix?style=flat&color=ffd43b&label=звёзды" alt="Звёзды GitHub"></a>
+  <a href="https://github.com/TheLarrryLoveMom/codex-fix/blob/main/LICENSE"><img src="https://img.shields.io/badge/лицензия-MIT-9cf" alt="Лицензия MIT"></a>
+  <img src="https://img.shields.io/badge/Linux-совместимо-2ea44f?logo=linux&logoColor=white" alt="Linux">
+</p>
+
+<p align="center">
+  <a href="https://github.com/TheLarrryLoveMom/codex-fix/stargazers"><img src="https://img.shields.io/badge/⭐_Поставить_звезду-на_GitHub-ffd43b?style=for-the-badge&logo=github&logoColor=white" alt="Поставить звезду"></a>
+  <a href="#поддержать-проект"><img src="https://img.shields.io/badge/🪙_Поддержать-проект-9b5de5?style=for-the-badge" alt="Поддержать проект"></a>
+</p>
 
 **2.1.0** · Linux · Python 3.9+ · без сторонних Python-зависимостей
 
@@ -9,21 +29,44 @@ CLI, расширение в VS Code и отдельное приложение 
 или прямое соединение, исправляет только нужные способы запуска и проверяет результат.
 Если проверенные маршруты и файлы исправны, повторной записи нет.
 
-> Это сетевой помощник, а не универсальный ремонт приложения. Он не восстанавливает
-> подписку, не обходит ограничения аккаунта и не вводит за пользователя данные входа.
+> [!NOTE]
+> Это сетевой помощник. Он не восстанавливает подписку, не обходит ограничения аккаунта
+> и не вводит данные входа за пользователя.
 
 ## Быстрый старт
 
 Нужны Linux, Bash, **Python 3.9+**, `curl` и стандартный `readlink`.
 Для автоматического обнаружения портов нужен `ss` из пакета `iproute2`.
 
+### Установка одной командой
+
 ```bash
-git clone https://github.com/TheLarrryLoveMom/codex-fix.git
-cd codex-fix
-./codex-fix.sh --fix
+curl -fsSL https://raw.githubusercontent.com/TheLarrryLoveMom/codex-fix/main/install.sh | bash
 ```
 
-Репозиторий приватный: клонирование требует доступа к нему и настроенной авторизации GitHub.
+Установщик сохраняет программу в `~/.local/share/codex-fix/app`, создаёт команду
+`~/.local/bin/codex-fix` и ничего не запускает автоматически. Затем:
+
+```bash
+codex-fix --fix
+```
+
+Если `~/.local/bin` ещё не добавлен в `PATH`, откройте новый терминал или выполните
+скрипт по пути, который напечатает установщик. Запустить проверку сразу после установки:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheLarrryLoveMom/codex-fix/main/install.sh | bash -s -- --fix
+```
+
+Команда `curl | bash` удобна, но запускает свежую версию из ветки `main`. Перед запуском
+можно прочитать её содержимое или установить проект из клона:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheLarrryLoveMom/codex-fix/main/install.sh
+git clone https://github.com/TheLarrryLoveMom/codex-fix.git
+cd codex-fix && ./codex-fix.sh --fix
+```
+
 Запускайте скрипт **от своего пользователя, без sudo**. VPN/прокси-клиент должен быть
 установлен и подключён заранее, если прямое соединение не работает.
 
@@ -283,6 +326,7 @@ GitHub Actions запускает проверки при push и pull request.
 ```text
 codex-fix.sh              # точка входа
 codex_fix.py              # диагностика, исправления, резервные копии
+install.sh                # установка через curl
 tests/test_codex_fix.py   # офлайн-регрессионные тесты
 .github/workflows/check.yml
 README.md
@@ -290,5 +334,14 @@ README.md
 
 ## Лицензия
 
-Лицензия пока не выбрана; разрешение на распространение и использование отдельно
-не предоставлено.
+Проект распространяется по [лицензии MIT](LICENSE). Его можно использовать,
+изменять и распространять при сохранении текста лицензии.
+
+## Поддержать проект
+
+Если Codex Fix помог вам вернуться к работе, поставьте
+[⭐ звезду на GitHub](https://github.com/TheLarrryLoveMom/codex-fix/stargazers) — это
+помогает проекту стать заметнее.
+
+Адреса криптокошельков будут добавлены автором. Перед переводом всегда сверяйте сеть
+и адрес: криптоплатежи необратимы.
