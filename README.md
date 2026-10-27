@@ -16,8 +16,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TheLarrryLoveMom/codex-fix/stargazers"><img src="https://img.shields.io/badge/⭐_Поставить_звезду-на_GitHub-ffd43b?style=for-the-badge&logo=github&logoColor=white" alt="Поставить звезду"></a>
-  <a href="#поддержать-проект"><img src="https://img.shields.io/badge/🪙_Поддержать-проект-9b5de5?style=for-the-badge" alt="Поддержать проект"></a>
+  <a href="https://github.com/TheLarrryLoveMom/codex-fix/stargazers"><img src="https://img.shields.io/static/v1?style=for-the-badge&label=Star&message=GitHub&color=181717&logo=github&logoColor=white" alt="Поставить звезду на GitHub"></a>
+  <a href="#поддержать-проект"><img src="https://img.shields.io/static/v1?style=for-the-badge&label=Support&message=Crypto&color=9B5DE5" alt="Поддержать проект криптовалютой"></a>
 </p>
 
 **2.1.0** · Linux · Python 3.9+ · без сторонних Python-зависимостей
@@ -343,5 +343,9 @@ README.md
 [⭐ звезду на GitHub](https://github.com/TheLarrryLoveMom/codex-fix/stargazers) — это
 помогает проекту стать заметнее.
 
-Адреса криптокошельков будут добавлены автором. Перед переводом всегда сверяйте сеть
-и адрес: криптоплатежи необратимы.
+| Сеть | Адрес | Проверить адрес |
+| --- | --- | --- |
+| TRON · TRX / USDT TRC-20 | `TP2LzSu75jCBEY69ax8HXo2nB4WUrM7ckN` | [Tronscan](https://tronscan.org/#/address/TP2LzSu75jCBEY69ax8HXo2nB4WUrM7ckN) |
+| Bitcoin · BTC | `bc1q3mckn378079l4y0fzvhgvjye6s28cn4ehee4pd` | [Mempool](https://mempool.space/address/bc1q3mckn378079l4y0fzvhgvjye6s28cn4ehee4pd) |
+
+Перед переводом всегда сверяйте сеть и адрес: криптоплатежи необратимы.
