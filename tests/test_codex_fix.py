@@ -222,6 +222,24 @@ class FilesTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
 
+class CliTests(unittest.TestCase):
+    def test_fix_selects_automatic_repair(self):
+        with patch.object(fix.os, "geteuid", return_value=1000), patch.object(fix.socket, "socket"), patch.object(fix, "doctor", return_value=0) as doctor:
+            self.assertEqual(fix.main(["--fix"]), 0)
+        args = doctor.call_args.args[0]
+        self.assertTrue(args.fix)
+        self.assertFalse(args.check)
+        self.assertFalse(args.restore)
+
+    def test_fix_rejects_conflicting_modes_before_repair(self):
+        for flag in ("--check", "--dry-run", "--restore"):
+            with contextlib.redirect_stderr(io.StringIO()), patch.object(fix, "doctor") as doctor:
+                with self.assertRaises(SystemExit) as error:
+                    fix.main(["--fix", flag])
+                self.assertEqual(error.exception.code, 2)
+                doctor.assert_not_called()
+
+
 class DoctorTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="codex-fix-doctor-")

@@ -612,12 +612,15 @@ def doctor(args, *, home=None, env=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Автоматический сетевой фикс Codex CLI, VS Code и ChatGPT/Codex Desktop для Linux.")
+    parser.add_argument("--fix", action="store_true", help="автоматически проверить и исправить все найденные компоненты (режим по умолчанию)")
     parser.add_argument("--check", "--dry-run", action="store_true", help="только диагностика, без записи файлов")
     parser.add_argument("--proxy", help="предпочтительный локальный http(s):// или socks5(h):// прокси")
     parser.add_argument("--timeout", type=int, default=6, choices=range(1, 31), metavar="1..30", help="тайм-аут одной проверки, секунды")
     parser.add_argument("--restore", action="store_true", help="восстановить файлы до первого исправления")
     parser.add_argument("--version", action="version", version=VERSION)
     args = parser.parse_args(argv)
+    if args.fix and (args.check or args.restore):
+        parser.error("--fix нельзя сочетать с --check/--dry-run или --restore")
     if sys.version_info < (3, 9):
         parser.error("требуется Python 3.9 или новее")
     if sys.platform != "linux":
